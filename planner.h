@@ -4,6 +4,7 @@
 
   Copyright (c) 2009-2011 Simen Svale Skogsrud
   Copyright (c) 2011 Sungeun K. Jeon  
+  Copyright (c) 2011 Jens Geisler
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -35,21 +36,21 @@ typedef struct {
   
   // Fields used by the motion planner to manage acceleration
   double nominal_speed;               // The nominal speed for this block in mm/min  
+  double rate_factor;                 // nominal_rate= nominal_speed*rate_factor
   double entry_speed;                 // Entry speed at previous-current junction in mm/min
   double max_entry_speed;             // Maximum allowable junction entry speed in mm/min
   double millimeters;                 // The total travel of this block in mm
-  uint8_t recalculate_flag;           // Planner flag to recalculate trapezoids on entry junction
-  uint8_t nominal_length_flag;        // Planner flag for nominal speed always reached
-
+  
   // Settings for the trapezoid generator
   uint32_t initial_rate;              // The jerk-adjusted step rate at start of block  
   uint32_t final_rate;                // The minimal rate at exit
   int32_t rate_delta;                 // The steps/minute to add or subtract when changing speed (must be positive)
   uint32_t accelerate_until;          // The index of the step event on which to stop acceleration
   uint32_t decelerate_after;          // The index of the step event on which to start decelerating
-  
+  uint8_t max_accel_reached;          // The current block cannot have a faster exit speed than it already has
+  uint8_t nomi_speed_reached;         // This block actually reaches nominal speed
 } block_t;
-      
+
 // Initialize the motion plan subsystem      
 void plan_init();
 
@@ -58,6 +59,9 @@ void plan_init();
 // rate is taken to mean "frequency" and would complete the operation in 1/feed_rate minutes.
 void plan_buffer_line(double x, double y, double z, double feed_rate, uint8_t invert_feed_rate);
 
+// clear all pending moves in case of abort or emergency stop
+void plan_clear_queue();
+
 // Called when the current block is no longer needed. Discards the block and makes the memory
 // availible for new blocks.
 void plan_discard_current_block();
@@ -65,11 +69,6 @@ void plan_discard_current_block();
 // Gets the current block. Returns NULL if buffer empty
 block_t *plan_get_current_block();
 
-// Enables or disables acceleration-management for upcoming blocks
-void plan_set_acceleration_manager_enabled(uint8_t enabled);
-
-// Is acceleration-management currently enabled?
-int plan_is_acceleration_manager_enabled();
 
 // Reset the position vector
 void plan_set_current_position(double x, double y, double z); 
