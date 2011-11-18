@@ -4,7 +4,8 @@
 
   Copyright (c) 2009-2011 Simen Svale Skogsrud
   Copyright (c) 2011 Sungeun K. Jeon
-  
+  Copyright (c) 2011 Jens Geisler
+
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -49,7 +50,10 @@ static int32_t counter_x,       // Counter variables for the bresenham line trac
                counter_y, 
                counter_z;       
 static uint32_t step_events_completed; // The number of step events executed in the current block
-static volatile int busy; // true when SIG_OUTPUT_COMPARE1A is being serviced. Used to avoid retriggering that handler.
+
+volatile int8_t st_accelerating= 1;
+
+static volatile uint8_t busy; // true when SIG_OUTPUT_COMPARE1A is being serviced. Used to avoid retriggering that handler.
 
 // Variables used by the trapezoid generation
 static uint32_t cycles_per_step_event;        // The number of machine cycles between each step event
@@ -89,9 +93,11 @@ void st_wake_up() {
 }
 
 // Stepper shutdown
-static void st_go_idle() {
+void st_go_idle() {
   // Cycle finished. Set flag to false.
   cycle_start = false; 
+  // Disable stepper driver interrupt
+  TIMSK1 &= ~(1<<OCIE1A); 
   // Force stepper dwell to lock axes for a defined amount of time to ensure the axes come to a complete
   // stop and not drift from residual inertial forces at the end of the last movement.
   #if STEPPER_IDLE_LOCK_TIME
@@ -99,8 +105,6 @@ static void st_go_idle() {
   #endif
   // Disable steppers by setting stepper disable
   STEPPERS_DISABLE_PORT |= (1<<STEPPERS_DISABLE_BIT);
-  // Disable stepper driver interrupt
-  TIMSK1 &= ~(1<<OCIE1A); 
 }
 
 // Initializes the trapezoid generator from the current block. Called whenever a new 
@@ -110,6 +114,7 @@ static void trapezoid_generator_reset() {
   min_safe_rate = current_block->rate_delta + (current_block->rate_delta >> 1); // 1.5 x rate_delta
   trapezoid_tick_cycle_counter = CYCLES_PER_ACCELERATION_TICK/2; // Start halfway for midpoint rule.
   set_step_events_per_minute(trapezoid_adjusted_rate); // Initialize cycles_per_step_event
+  st_accelerating= 1;
 }
 
 // This function determines an acceleration velocity change every CYCLES_PER_ACCELERATION_TICK by
@@ -123,7 +128,7 @@ static uint8_t iterate_trapezoid_cycle_counter() {
   } else {
     return(false);
   }
-}          
+}
 
 // "The Stepper Driver Interrupt" - This timer interrupt is the workhorse of Grbl. It is executed at the rate set with
 // config_step_timer. It pops blocks from the block_buffer and executes them by pulsing the stepper pins appropriately. 
@@ -140,9 +145,8 @@ SIGNAL(TIMER1_COMPA_vect)
   STEPPING_PORT = (STEPPING_PORT & ~STEP_MASK) | out_bits;
   // Reset step pulse reset timer so that The Stepper Port Reset Interrupt can reset the signal after
   // exactly settings.pulse_microseconds microseconds.
-//   TCNT2 = -(((settings.pulse_microseconds-2)*TICKS_PER_MICROSECOND)/8);
-  TCNT2 = -(((settings.pulse_microseconds-2)*TICKS_PER_MICROSECOND) >> 3); // Bit shift divide by 8.
-  
+  TCNT2 = -(((settings.pulse_microseconds-2)*TICKS_PER_MICROSECOND) >> 3);
+
   busy = true;
   sei(); // Re enable interrupts (normally disabled while inside an interrupt handler)
          // ((We re-enable interrupts in order for SIG_OVERFLOW2 to be able to be triggered 
@@ -160,8 +164,8 @@ SIGNAL(TIMER1_COMPA_vect)
       step_events_completed = 0;     
     } else {
       st_go_idle();
-    }    
-  } 
+    }
+  }
 
   if (current_block != NULL) {
     // Execute step displacement profile by bresenham line algorithm
@@ -181,9 +185,7 @@ SIGNAL(TIMER1_COMPA_vect)
       out_bits |= (1<<Z_STEP_BIT);
       counter_z -= current_block->step_event_count;
     }
-    
-    step_events_completed++; // Iterate step events
-
+    step_events_completed++; // not really completed until the interrupt is called the next time
     // While in block steps, check for de/ac-celeration events and execute them accordingly.
     if (step_events_completed < current_block->step_event_count) {
       
@@ -235,12 +237,14 @@ SIGNAL(TIMER1_COMPA_vect)
             set_step_events_per_minute(trapezoid_adjusted_rate);
           }
         }
+        st_accelerating= 0;
       } else {
         // No accelerations. Make sure we cruise exactly at the nominal rate.
         if (trapezoid_adjusted_rate != current_block->nominal_rate) {
           trapezoid_adjusted_rate = current_block->nominal_rate;
           set_step_events_per_minute(trapezoid_adjusted_rate);
         }
+        st_accelerating= 0;
       }
             
     } else {   
@@ -266,22 +270,22 @@ SIGNAL(TIMER2_OVF_vect)
 // Initialize and start the stepper motor subsystem
 void st_init()
 {
-	// Configure directions of interface pins
+  // Configure directions of interface pins
   STEPPING_DDR   |= STEPPING_MASK;
   STEPPING_PORT = (STEPPING_PORT & ~STEPPING_MASK) | settings.invert_mask;
   STEPPERS_DISABLE_DDR |= 1<<STEPPERS_DISABLE_BIT;
   
-	// waveform generation = 0100 = CTC
-	TCCR1B &= ~(1<<WGM13);
-	TCCR1B |=  (1<<WGM12);
-	TCCR1A &= ~(1<<WGM11); 
-	TCCR1A &= ~(1<<WGM10);
+  // waveform generation = 0100 = CTC
+  TCCR1B &= ~(1<<WGM13);
+  TCCR1B |=  (1<<WGM12);
+  TCCR1A &= ~(1<<WGM11); 
+  TCCR1A &= ~(1<<WGM10);
 
-	// output mode = 00 (disconnected)
-	TCCR1A &= ~(3<<COM1A0); 
-	TCCR1A &= ~(3<<COM1B0); 
-	
-	// Configure Timer 2
+  // output mode = 00 (disconnected)
+  TCCR1A &= ~(3<<COM1A0); 
+  TCCR1A &= ~(3<<COM1B0); 
+  
+  // Configure Timer 2
   TCCR2A = 0;         // Normal operation
   TCCR2B = (1<<CS21); // Full speed, 1/8 prescaler
   TIMSK2 |= (1<<TOIE2);      
@@ -306,33 +310,33 @@ static uint32_t config_step_timer(uint32_t cycles)
   uint16_t ceiling;
   uint16_t prescaler;
   uint32_t actual_cycles;
-	if (cycles <= 0xffffL) {
-		ceiling = cycles;
+  if (cycles <= 0xffffL) {
+    ceiling = cycles;
     prescaler = 0; // prescaler: 0
     actual_cycles = ceiling;
-	} else if (cycles <= 0x7ffffL) {
+  } else if (cycles <= 0x7ffffL) {
     ceiling = cycles >> 3;
     prescaler = 1; // prescaler: 8
     actual_cycles = ceiling * 8L;
-	} else if (cycles <= 0x3fffffL) {
-		ceiling =  cycles >> 6;
+  } else if (cycles <= 0x3fffffL) {
+    ceiling =  cycles >> 6;
     prescaler = 2; // prescaler: 64
     actual_cycles = ceiling * 64L;
-	} else if (cycles <= 0xffffffL) {
-		ceiling =  (cycles >> 8);
+  } else if (cycles <= 0xffffffL) {
+    ceiling =  (cycles >> 8);
     prescaler = 3; // prescaler: 256
     actual_cycles = ceiling * 256L;
-	} else if (cycles <= 0x3ffffffL) {
-		ceiling = (cycles >> 10);
+  } else if (cycles <= 0x3ffffffL) {
+    ceiling = (cycles >> 10);
     prescaler = 4; // prescaler: 1024
     actual_cycles = ceiling * 1024L;    
-	} else {
-	  // Okay, that was slower than we actually go. Just set the slowest speed
-		ceiling = 0xffff;
+  } else {
+    // Okay, that was slower than we actually go. Just set the slowest speed
+    ceiling = 0xffff;
     prescaler = 4;
     actual_cycles = 0xffff * 1024;
-	}
-	// Set prescaler
+  }
+  // Set prescaler
   TCCR1B = (TCCR1B & ~(0x07<<CS10)) | ((prescaler+1)<<CS10);
   // Set ceiling
   OCR1A = ceiling;
