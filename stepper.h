@@ -3,6 +3,7 @@
   Part of Grbl
 
   Copyright (c) 2009-2011 Simen Svale Skogsrud
+  Copyright (c) 2011 Jens Geisler
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -40,5 +41,9 @@ void st_go_home();
              
 // Notify the stepper subsystem to start executing the g-code program in buffer.
 void st_cycle_start();
+
+void st_go_idle();
+
+extern volatile int8_t st_accelerating;
 
 #endif
