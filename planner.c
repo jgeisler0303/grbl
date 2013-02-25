@@ -387,10 +387,12 @@ void plan_synchronize()
 // Also the feed rate input value is used in three ways: as a normal feed rate if invert_feed_rate
 // is false, as inverse time if invert_feed_rate is true, or as seek/rapids rate if the feed_rate
 // value is negative (and invert_feed_rate always false).
-void plan_buffer_line(float x, float y, float z, float feed_rate, uint8_t invert_feed_rate) 
+void plan_buffer_line(float x, float y, float z, float feed_rate, uint8_t invert_feed_rate, uint16_t line_number)
 {
   // Prepare to set up new block
   block_t *block = &block_buffer[block_buffer_head];
+
+  block->line_number= line_number;
 
   // Calculate target position in absolute steps
   int32_t target[N_AXIS];

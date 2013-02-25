@@ -207,9 +207,10 @@ uint8_t gc_execute_line(char *line)
   float p = 0, r = 0;
   uint8_t l = 0;
   char_counter = 0;
+  gc.line_number= 0;
   while(next_statement(&letter, &value, line, &char_counter)) {
     switch(letter) {
-      case 'G': case 'M': case 'N': break; // Ignore command statements and line numbers
+      case 'G': case 'M': break; // Ignore command statements and line numbers
       case 'F': 
         if (value <= 0) { FAIL(STATUS_INVALID_STATEMENT); } // Must be greater than zero
         if (gc.inverse_feed_rate_mode) {
@@ -220,6 +221,7 @@ uint8_t gc_execute_line(char *line)
         break;
       case 'I': case 'J': case 'K': offset[letter-'I'] = to_millimeters(value); break;
       case 'L': l = trunc(value); break;
+      case 'N': gc.line_number= trunc(value); break;
       case 'P': p = value; break;                    
       case 'R': r = to_millimeters(value); break;
       case 'S': 
@@ -328,7 +330,7 @@ uint8_t gc_execute_line(char *line)
       uint8_t home_select = SETTING_INDEX_G28;
       if (non_modal_action == NON_MODAL_GO_HOME_1) { home_select = SETTING_INDEX_G30; }
       if (!settings_read_coord_data(home_select,coord_data)) { return(STATUS_SETTING_READ_FAIL); }
-      mc_line(coord_data[X_AXIS], coord_data[Y_AXIS], coord_data[Z_AXIS], -1.0, false); 
+      mc_line(coord_data[X_AXIS], coord_data[Y_AXIS], coord_data[Z_AXIS], -1.0, false);
       memcpy(gc.position, coord_data, sizeof(coord_data)); // gc.position[] = coord_data[];
       axis_words = 0; // Axis words used. Lock out from motion modes by clearing flags.
       break;

@@ -308,7 +308,11 @@ void report_realtime_status()
     case STATE_ALARM: printPgmString(PSTR("<Alarm")); break;
     case STATE_CHECK_MODE: printPgmString(PSTR("<Check")); break;
   }
- 
+
+  // Report GCode line number
+  printPgmString(PSTR(",Line:"));
+  printInteger(plan_get_current_block()->line_number);
+
   // Report machine position
   printPgmString(PSTR(",MPos:")); 
   for (i=0; i< N_AXIS; i++) {

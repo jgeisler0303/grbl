@@ -83,6 +83,7 @@ typedef struct {
                                    // position in mm. Loaded from EEPROM when called.
   float coord_offset[N_AXIS];      // Retains the G92 coordinate offset (work coordinates) relative to
                                    // machine zero in mm. Non-persistent. Cleared upon reset and boot.        
+  uint16_t line_number;            // GCode line number of the most recent block or zero if no 'N' was found
 } parser_state_t;
 extern parser_state_t gc;
 

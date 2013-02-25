@@ -69,7 +69,7 @@ void mc_line(float x, float y, float z, float feed_rate, uint8_t invert_feed_rat
     protocol_execute_runtime(); // Check for any run-time commands
     if (sys.abort) { return; } // Bail, if system abort.
   } while ( plan_check_full_buffer() );
-  plan_buffer_line(x, y, z, feed_rate, invert_feed_rate);
+  plan_buffer_line(x, y, z, feed_rate, invert_feed_rate, gc.line_number);
 
   // If idle, indicate to the system there is now a planned block in the buffer ready to cycle 
   // start. Otherwise ignore and continue on.
@@ -253,6 +253,7 @@ void mc_go_home()
     if (settings.homing_dir_mask & (1<<Z_DIRECTION_BIT)) { z_dir = 1; }
     else { z_dir = -1; }
   }
+  gc.line_number= 0;
   mc_line(x_dir*settings.homing_pulloff, y_dir*settings.homing_pulloff, 
           z_dir*settings.homing_pulloff, settings.homing_seek_rate, false);
   st_cycle_start(); // Move it. Nothing should be in the buffer except this motion. 

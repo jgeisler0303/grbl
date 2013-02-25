@@ -50,6 +50,7 @@ typedef struct {
   uint32_t decelerate_after;          // The index of the step event on which to start decelerating
   uint32_t nominal_rate;              // The nominal step rate for this block in step_events/minute
   uint32_t d_next;                    // Scaled distance to next step
+  uint16_t line_number;
 } block_t;
       
 // Initialize the motion plan subsystem      
